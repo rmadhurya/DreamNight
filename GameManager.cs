@@ -1,27 +1,42 @@
 using UnityEngine;
+using System;
 using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
     [Header("Game Settings")]
-    public float matchCheckDelay = 1f; // Time to wait before checking matches
-    public int scorePerMatch = 100;
-    public string[] evilTileNames = {"EvilTile1", "EvilTile2"}; // Names of the 2 evil tile prefabs
+    public int scorePerMatch = 100; // base points per good match
+    public string[] evilTileNames = {"EvilTile1", "EvilTile2"};
     private List<TileFlipper> revealedEvilTiles = new List<TileFlipper>();
-    
+
+    [Header("Scoring Formula")]
+    public int streakIncrement = 20;
+    public int streakBonusCap = 100;
+    public int miniGameMaxBonus = 150;
+    public int completionBonus = 500;
+    public int timeBonusMax = 200;
+    public float timeBonusTargetSeconds = 180f; // clear under this for max time bonus
+
+    [Header("Mini-Game Window")]
+    public MiniGameWindowController miniGameWindow;
+    public EndScreenController endScreenController;
+
     [Header("UI References")]
     public TMPro.TextMeshProUGUI scoreText;
     public TMPro.TextMeshProUGUI gameStatusText;
-    
+
     private List<TileFlipper> flippedTiles = new List<TileFlipper>();
     private int currentScore = 0;
-    private int totalGoodMatches = 7; // Only 7 good pairs
+    private int totalGoodMatches = 7;
     private int foundGoodMatches = 0;
+    private int currentStreak = 0;
+    private float roundStartTime;
     private bool canFlip = true;
     private bool gameOver = false;
-    
+    private bool gameStarted = false;
+
     public static GameManager Instance { get; private set; }
-    
+
     void Awake()
     {
         if (Instance == null)
@@ -33,279 +48,261 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
         }
     }
-    
+
     void Start()
     {
+        roundStartTime = Time.time;
         UpdateUI();
     }
-    
+
     public void RegisterFlippedTile(TileFlipper tile)
     {
         if (!canFlip || gameOver) return;
-        
-        // Check if this is an evil tile
+
         if (IsEvilTile(tile))
         {
-            Debug.Log("Evil tile registered: " + tile.gameObject.name);
             HandleEvilTileFlipped(tile);
-            
-            // Add to revealed evil tiles array
             revealedEvilTiles.Add(tile);
-            Debug.Log("Revealed evil tiles count: " + revealedEvilTiles.Count);
 
-            // If there's already a good tile flipped, flip it back (mismatch with evil)
             if (flippedTiles.Count > 0)
             {
-                Debug.Log("Evil tile flipped while good tile was waiting - flipping good tile back");
-                
-                // Create a copy to avoid collection modification during enumeration
                 List<TileFlipper> tilesToFlipBack = new List<TileFlipper>(flippedTiles);
-                flippedTiles.Clear(); // Clear first to avoid UnregisterFlippedTile issues
-                
-                // Now flip back the tiles
+                flippedTiles.Clear();
+
                 foreach (TileFlipper goodTile in tilesToFlipBack)
                 {
                     goodTile.FlipBack();
                 }
-                
-                canFlip = true; // Allow new round to begin immediately
+
+                canFlip = true;
             }
-            
-            // Check for evil pair matches
+
             CheckForEvilPairMatch();
-            
-            return; // Don't add to normal flippedTiles list
+            return;
         }
-        
+
         flippedTiles.Add(tile);
-        Debug.Log("Total flipped tiles now: " + flippedTiles.Count);
-        
+
         if (flippedTiles.Count == 2)
         {
             canFlip = false;
-            Invoke(nameof(CheckForMatch), matchCheckDelay);
+            Invoke(nameof(CheckForMatch), 1f);
         }
     }
 
     private void CheckForEvilPairMatch()
     {
-        Debug.Log("=== CheckForEvilPairMatch called ===");
-        Debug.Log("Total revealed evil tiles: " + revealedEvilTiles.Count);
-        
         if (revealedEvilTiles.Count < 2) return;
-        
-        // Check all combinations of revealed evil tiles for matches
+
         for (int i = 0; i < revealedEvilTiles.Count - 1; i++)
         {
             for (int j = i + 1; j < revealedEvilTiles.Count; j++)
             {
-                TileFlipper tile1 = revealedEvilTiles[i];
-                TileFlipper tile2 = revealedEvilTiles[j];
-                
-                Debug.Log("Checking evil pair: " + tile1.gameObject.name + " vs " + tile2.gameObject.name);
-                
-                if (DoTilesMatch(tile1, tile2))
+                if (DoTilesMatch(revealedEvilTiles[i], revealedEvilTiles[j]))
                 {
-                    Debug.Log("EVIL PAIR MATCH FOUND! GAME OVER!");
-                    HandleEvilPairMatch(tile1, tile2);
-                    return; // Game over, no need to check more
+                    HandleEvilPairMatch(revealedEvilTiles[i], revealedEvilTiles[j]);
+                    return;
                 }
             }
         }
     }
-    
+
     public void UnregisterFlippedTile(TileFlipper tile)
     {
         flippedTiles.Remove(tile);
     }
-    
+
     private void CheckForMatch()
     {
-        Debug.Log("=== CheckForMatch called ===");
-        Debug.Log("Flipped tiles count: " + flippedTiles.Count);
-        Debug.Log("Game over status: " + gameOver);
-        
         if (flippedTiles.Count != 2 || gameOver)
         {
             canFlip = true;
             return;
         }
-        
+
         TileFlipper tile1 = flippedTiles[0];
         TileFlipper tile2 = flippedTiles[1];
-        
-        Debug.Log("Checking match between: " + tile1.gameObject.name + " and " + tile2.gameObject.name);
-        
-        // Check if tiles match by comparing their prefab names
-        bool isMatch = DoTilesMatch(tile1, tile2);
-        Debug.Log("Do tiles match? " + isMatch);
-        
-        if (isMatch)
+
+        if (DoTilesMatch(tile1, tile2))
         {
-            // Since evil tiles are handled separately, these should only be good matches
-            Debug.Log("Good match found!");
             HandleGoodMatch(tile1, tile2);
         }
         else
         {
-            Debug.Log("No match - flipping back");
             HandleMismatch(tile1, tile2);
+            flippedTiles.Clear();
+            canFlip = true;
         }
-        
-        flippedTiles.Clear();
-        canFlip = true;
     }
-    
+
     private bool DoTilesMatch(TileFlipper tile1, TileFlipper tile2)
     {
-        // Compare by prefab name (remove "(Clone)" suffix)
-        string name1 = tile1.gameObject.name.Replace("(Clone)", "");
-        string name2 = tile2.gameObject.name.Replace("(Clone)", "");
-        
-        Debug.Log("Comparing: '" + name1 + "' vs '" + name2 + "'");
-        bool match = name1 == name2;
-        Debug.Log("Match result: " + match);
-        
-        return match;
+        string name1 = tile1.gameObject.name.Replace("(Clone)", "").Trim();
+        string name2 = tile2.gameObject.name.Replace("(Clone)", "").Trim();
+        return string.Equals(name1, name2, StringComparison.OrdinalIgnoreCase);
     }
-    
+
     private void HandleGoodMatch(TileFlipper tile1, TileFlipper tile2)
     {
-        // Keep tiles flipped and disable interaction
         tile1.SetMatched(true);
         tile2.SetMatched(true);
-        
-        // Calculate the midpoint between the two matched tiles for animation start position
+
         Vector3 animationStartPos = (tile1.transform.position + tile2.transform.position) * 0.5f;
-        
-        // Get the tile type (remove "(Clone)" suffix)
-        string tileType = tile1.gameObject.name.Replace("(Clone)", "");
-        
-        // Trigger collection animation
+        string tileType = tile1.gameObject.name.Replace("(Clone)", "").Trim();
+
         if (CollectionBox.Instance != null)
         {
             CollectionBox.Instance.CollectIcon(tile1, tile2, animationStartPos, tileType);
         }
-        
-        // Update score
-        currentScore += scorePerMatch;
+
+        currentStreak++;
         foundGoodMatches++;
-        
-        UpdateUI();
-        CheckWinCondition();
-    }
-    
-    private void HandleEvilTileFlipped(TileFlipper tile)
-    {
-        Debug.Log("Evil tile flipped! " + tile.gameObject.name);
-        // Evil tile stays flipped for the rest of the game
-        tile.SetEvilFlipped(true);
-        
-        // Visual feedback for evil tile
-        if (gameStatusText != null)
-            gameStatusText.text = "Evil tile revealed! Be careful...";
-    }
-    
-    private void HandleEvilPairMatch(TileFlipper tile1, TileFlipper tile2)
-    {
-        Debug.Log("=== EVIL PAIR MATCHED - TRIGGERING GAME OVER ===");
-        
-        gameOver = true;
-        canFlip = false;
-        
-        // Keep evil tiles visible
-        tile1.SetMatched(true);
-        tile2.SetMatched(true);
-        
-        string gameOverMessage = "GAME OVER! Evil Pair Matched! Final Score: " + foundGoodMatches + "/" + totalGoodMatches;
-        Debug.Log(gameOverMessage);
-        
-        // Try multiple ways to show game over
-        if (gameStatusText != null)
+        flippedTiles.Clear();
+
+        // Board stays locked (canFlip is false) until the mini-game finishes.
+        if (miniGameWindow != null)
         {
-            gameStatusText.text = gameOverMessage;
-            gameStatusText.color = Color.red; // Make it red for emphasis
-            Debug.Log("Game over message set to UI text");
+            miniGameWindow.TriggerMiniGame(tileType, performancePercent => OnMiniGameComplete(performancePercent));
         }
         else
         {
-            Debug.LogError("gameStatusText is NULL! UI not properly linked!");
-        }
-        
-        // Also update score text to show final score
-        if (scoreText != null)
-        {
-            scoreText.text = "FINAL SCORE: " + currentScore + " (" + foundGoodMatches + "/7 matches)";
-            scoreText.color = Color.red;
+            // No window controller assigned (e.g. testing) - just award base score.
+            OnMiniGameComplete(0f);
         }
     }
-    
+
+    private void OnMiniGameComplete(float performancePercent)
+    {
+        int streakBonus = Mathf.Min((currentStreak - 1) * streakIncrement, streakBonusCap);
+        int miniGameBonus = Mathf.RoundToInt(Mathf.Clamp01(performancePercent) * miniGameMaxBonus);
+        int matchScore = scorePerMatch + streakBonus + miniGameBonus;
+
+        currentScore += matchScore;
+
+        canFlip = true;
+        UpdateUI();
+        CheckWinCondition();
+    }
+
+    private void HandleEvilTileFlipped(TileFlipper tile)
+    {
+        tile.SetEvilFlipped(true);
+        currentStreak = 0; // an evil reveal breaks the streak bonus
+
+        if (gameStatusText != null)
+            gameStatusText.text = "Evil tile revealed! Be careful...";
+    }
+
+    private void HandleEvilPairMatch(TileFlipper tile1, TileFlipper tile2)
+    {
+        gameOver = true;
+        canFlip = false;
+
+        tile1.SetMatched(true);
+        tile2.SetMatched(true);
+
+        UpdateUI();
+
+        if (endScreenController != null)
+        {
+            endScreenController.ShowGameOver(currentScore, foundGoodMatches, totalGoodMatches);
+        }
+    }
+
     private void HandleMismatch(TileFlipper tile1, TileFlipper tile2)
     {
-        // Flip tiles back
         tile1.FlipBack();
         tile2.FlipBack();
     }
-    
+
     private void CheckWinCondition()
     {
         if (foundGoodMatches >= totalGoodMatches && !gameOver)
         {
-            Debug.Log("Game Won! All good matches found!");
-            if (gameStatusText != null)
-                gameStatusText.text = "Congratulations! Perfect Score: " + foundGoodMatches + "/" + totalGoodMatches;
+            gameOver = true;
+            canFlip = false;
+
+            float elapsed = Time.time - roundStartTime;
+            int timeBonus = Mathf.RoundToInt(Mathf.Clamp01(1f - (elapsed / timeBonusTargetSeconds)) * timeBonusMax);
+            currentScore += completionBonus + timeBonus;
+
+            UpdateUI();
+
+            if (endScreenController != null)
+            {
+                endScreenController.ShowWin(currentScore, foundGoodMatches, totalGoodMatches, completionBonus, timeBonus);
+            }
         }
     }
-    
+
     private bool IsEvilTile(TileFlipper tile)
     {
-        string tileName = tile.gameObject.name.Replace("(Clone)", "");
-        
+        string tileName = tile.gameObject.name.Replace("(Clone)", "").Trim();
+
         foreach (string evilName in evilTileNames)
         {
-            if (tileName == evilName)
+            if (string.Equals(tileName, evilName.Trim(), StringComparison.OrdinalIgnoreCase))
                 return true;
         }
-        
+
         return false;
     }
-    
+
     private void UpdateUI()
     {
         if (scoreText != null)
             scoreText.text = "Score: " + currentScore;
-            
+
         if (gameStatusText != null && !gameOver)
             gameStatusText.text = "Good Matches: " + foundGoodMatches + "/" + totalGoodMatches;
     }
-    
+
     public void ResetGame()
     {
         currentScore = 0;
         foundGoodMatches = 0;
+        currentStreak = 0;
+        roundStartTime = Time.time;
         flippedTiles.Clear();
-        revealedEvilTiles.Clear(); // Clear the evil tiles array
+        revealedEvilTiles.Clear();
         canFlip = true;
         gameOver = false;
-        
-        // Reset collection box
+
         if (CollectionBox.Instance != null)
         {
             CollectionBox.Instance.ResetCollection();
         }
-        
-        // Find and reset all tiles
+
         TileSpawner spawner = FindObjectOfType<TileSpawner>();
         if (spawner != null)
         {
             spawner.RespawnTiles();
         }
-        
+
         UpdateUI();
     }
-    
+
     public bool CanFlipTiles()
     {
-        return canFlip && !gameOver;
+        return gameStarted && canFlip && !gameOver;
+    }
+
+    // Called by HomeScreenController's Play button
+    public void StartGame()
+    {
+        gameStarted = true;
+    }
+
+    // Called by EndScreenController's Play Again button
+    public void PlayAgain()
+    {
+        ResetGame();
+    }
+
+    // Called by EndScreenController's Home Screen button
+    public void ReturnToHomeScreen()
+    {
+        gameStarted = false;
+        ResetGame();
     }
 }

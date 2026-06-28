@@ -169,7 +169,7 @@ public class TileFlipper : MonoBehaviour
     private void StartGlowEffect(Color glowColor)
     {
         if (tileMaterial == null || isGlowing) return;
-        
+
         isGlowing = true;
         
         // Enable emission on the material
@@ -199,7 +199,7 @@ public class TileFlipper : MonoBehaviour
         }
         
         // Keep a subtle constant glow after the pulse
-        Color finalGlow = glowColor * (glowIntensity * 0.1f);
+        Color finalGlow = glowColor * (glowIntensity * 0.2f);
         tileMaterial.SetColor("_EmissionColor", finalGlow);
     }
     
