@@ -86,7 +86,7 @@ public class GameManager : MonoBehaviour
         if (flippedTiles.Count == 2)
         {
             canFlip = false;
-            Invoke(nameof(CheckForMatch), 1f);
+            Invoke(nameof(CheckForMatch), 0.5f);
         }
     }
 
