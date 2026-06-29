@@ -35,8 +35,10 @@ public class TileFlipper : MonoBehaviour
 
     private void HandleClick()
     {
-        // Don't allow clicking if matched, animating, or game doesn't allow flipping
-        if (isMatched || isAnimating) return;
+        // Don't allow clicking if matched, animating, already face-up, or game doesn't allow flipping.
+        // A face-up tile should only flip back down via FlipBack() (called by GameManager on a
+        // real mismatch) - never by the player clicking it again directly.
+        if (isMatched || isAnimating || isFlipped) return;
         if (GameManager.Instance != null && !GameManager.Instance.CanFlipTiles()) return;
         
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
@@ -169,7 +171,7 @@ public class TileFlipper : MonoBehaviour
     private void StartGlowEffect(Color glowColor)
     {
         if (tileMaterial == null || isGlowing) return;
-
+        
         isGlowing = true;
         
         // Enable emission on the material
@@ -199,7 +201,7 @@ public class TileFlipper : MonoBehaviour
         }
         
         // Keep a subtle constant glow after the pulse
-        Color finalGlow = glowColor * (glowIntensity * 0.2f);
+        Color finalGlow = glowColor * (glowIntensity * 0.1f);
         tileMaterial.SetColor("_EmissionColor", finalGlow);
     }
     

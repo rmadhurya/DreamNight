@@ -10,7 +10,7 @@ public class TileSpawner : MonoBehaviour
 
     // Hardcoded bounding box
     private Vector3 boxCenter = new Vector3(34.21f, 3.22f, -4.02f);
-    private Vector3 boxScale  = new Vector3(3.250326f, 1.0249f, 7.420689f);
+    private Vector3 boxScale  = new Vector3(2.6f, 1.0249f, 6.6f);
 
     void Start()
     {
